@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import personService from './services/persons'
 
 const Filter = ({filter, handler}) => {
   return (
@@ -9,11 +10,10 @@ const Filter = ({filter, handler}) => {
 }
 
 const NewPersonForm = (props) => {
-  console.log(props)
   return (
     <div>
       <form onSubmit={props.onSubmit}>
-        <div> name: <input value={props.nme} onChange={props.handleName} /> </div>
+        <div> name: <input value={props.name} onChange={props.handleName} /> </div>
         <div> number: <input value={props.number} onChange={props.handleNumber} /> </div>
         <div> <button type="submit">add</button> </div>
       </form>
@@ -21,44 +21,75 @@ const NewPersonForm = (props) => {
   )
 }
 
-const Person = ({name,number}) => {
+const Person = (props) => {
+  console.log(props)
   return (
     <>
-      <p>{name} {number}</p>
+      <p>
+        {props.name} {props.number} <button onClick={props.remove}>delete</button>
+      </p>
     </>
   )
 }
 
-const Persons = ({persons}) => {
+const Persons = (props) => {
   return (
     <div>
-      {persons.map(p => <Person id={p.id} name={p.name} number={p.number} />)}
+      {props.persons.map(p => <Person remove={() => props.remove(p)} id={p.id} name={p.name} number={p.number} />)}
     </div>
   )
 }
-
 
 const App = () => {
   const [newName, setNewName] = useState('')
   const [newNumber, setNewNumber] = useState('')
   const [newFilter, setFilter] = useState('')
-  const [persons, setPersons] = useState([
-    { id: 1, name: 'Arto Hellas', number: '040-123456' },
-    { id: 2, name: 'Ada Lovelace', number: '39-44-5323523' },
-    { id: 3, name: 'Dan Abramov', number: '12-43-234345' },
-    { id: 4, name: 'Mary Poppendieck', number: '39-23-6423122' }
-  ])
+  const [persons, setPersons] = useState([])
+
+  useEffect(() => {
+    personService.getAll()
+      .then(initialPersons => { 
+        console.log(initialPersons)
+        setPersons(initialPersons)
+      })
+  }, [])
+
   const addContact = (event) => {
     event.preventDefault()
-    console.log('nappula',event.target)
-    const newContact = { id: persons.length + 1, name: newName, number: newNumber}
+    const newContact = { name: newName, number: newNumber}
     if (persons.map( p => p.name).includes(newContact.name)) {
-      alert(`${newContact.name} is already added to phonebook`)
+      if (window.confirm(`${newContact.name} is already added to phonebook, replace the old number with a new one?`)) {
+      const person = persons.find(p => p.name === newName)
+      const id = person.id
+      const updatedPerson = {...person, number: newNumber}
+      personService.update(id,updatedPerson)
+        .then(returnedPerson => {
+          setPersons(persons.map(p => p.id !== id ? p : returnedPerson))
+          setNewNumber('')
+          setNewName('')
+        })
+      }
     } else {
-      setPersons(persons.concat(newContact))
+      personService.create(newContact)
+        .then(returnedPerson => {
+          setPersons(persons.concat(returnedPerson))
+          setNewNumber('')
+          setNewName('')
+        })
     }
   }
 
+  const removePerson = (person) => {
+    if (window.confirm(`Delete ${person.name}?`)) {
+      personService.deletePerson(person.id)
+        .then(_ => {
+          personService.getAll()
+            .then( remPersons => {
+              setPersons(remPersons)
+            })
+        })
+    }
+  }
   const handleNameChange = (event) => {
     setNewName(event.target.value)
   }
@@ -72,8 +103,6 @@ const App = () => {
   }
 
   const filterNumbers = (number) => {
-    console.log(number)
-    console.log(newFilter)
     return (number.name.toLowerCase().includes(newFilter.toLowerCase()) || number.number.includes(newFilter))
   }
     
@@ -84,7 +113,7 @@ const App = () => {
       <h2>Add a new</h2>
       <NewPersonForm onSubmit={addContact} name={newName} handleName={handleNameChange} number={newNumber} handleNumber={handleNumberChange} />
       <h2>Numbers</h2>
-      <Persons persons={persons.filter(filterNumbers)} />
+      <Persons remove={removePerson} persons={persons.filter(filterNumbers)} />
     </div>
   )
 }
