@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import personService from './services/persons'
+import './index.css'
 
 const Filter = ({filter, handler}) => {
   return (
@@ -40,11 +41,34 @@ const Persons = (props) => {
   )
 }
 
+const Notification = ({message}) => {
+  console.log(message)
+  if (!message) {
+    return null
+  }
+
+  return (
+    <div className="notification">{message}</div>
+  )
+}
+
+const ErrorMessage = ({message}) => {
+  if (!message) {
+    return null
+  }
+
+  return (
+    <div className="errorMessage">{message}</div>
+  )
+}
+
 const App = () => {
   const [newName, setNewName] = useState('')
   const [newNumber, setNewNumber] = useState('')
   const [newFilter, setFilter] = useState('')
   const [persons, setPersons] = useState([])
+  const [notification, setNotification] = useState('')
+  const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
     personService.getAll()
@@ -65,14 +89,28 @@ const App = () => {
       personService.update(id,updatedPerson)
         .then(returnedPerson => {
           setPersons(persons.map(p => p.id !== id ? p : returnedPerson))
-          setNewNumber('')
-          setNewName('')
+          setNotification(`Changed ${returnedPerson.name}'s number`)
+          setTimeout(() => {
+            setNotification(null)
+          },5000)
         })
+        .catch(error => {
+          setErrorMessage(`Information of ${newName} has already been removed`)
+          setTimeout(() => {
+            setErrorMessage(null)
+          },5000)
+        })
+        setNewNumber('')
+        setNewName('')
       }
     } else {
       personService.create(newContact)
         .then(returnedPerson => {
           setPersons(persons.concat(returnedPerson))
+          setNotification(`Added ${returnedPerson.name}`)
+          setTimeout(() => {
+            setNotification(null)
+          },5000)
           setNewNumber('')
           setNewName('')
         })
@@ -84,10 +122,14 @@ const App = () => {
       personService.deletePerson(person.id)
         .then(_ => {
           personService.getAll()
-            .then( remPersons => {
-              setPersons(remPersons)
+            .then( remainingPersons => {
+              setPersons(remainingPersons)
             })
         })
+      setNotification(`Removed ${person.name}`)
+      setTimeout(() => {
+        setNotification(null)
+      },5000)
     }
   }
   const handleNameChange = (event) => {
@@ -109,6 +151,8 @@ const App = () => {
   return (
     <div>
       <h2>Phonebook</h2>
+      <Notification message={notification} />
+      <ErrorMessage message={errorMessage} />
       <Filter filter={newFilter} handler={handleFilterChange}/>
       <h2>Add a new</h2>
       <NewPersonForm onSubmit={addContact} name={newName} handleName={handleNameChange} number={newNumber} handleNumber={handleNumberChange} />
