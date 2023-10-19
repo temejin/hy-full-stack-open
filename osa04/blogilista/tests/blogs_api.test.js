@@ -2,6 +2,8 @@ const mongoose = require('mongoose')
 const supertest = require('supertest')
 const app = require('../app')
 const Blog = require('../models/blog')
+const User = require('../models/user')
+const jwt = require('jsonwebtoken')
 
 const api = supertest(app)
 
@@ -40,8 +42,18 @@ const initialBlogs = [
 
 beforeEach(async () => {
   await Blog.deleteMany({})
+  await User.deleteMany({})
+  const user = new User({
+    username: 'user',
+    name: 'user',
+    passwordHash: 'secret'
+  })
+  await user.save()
   for (let i = 0; i < initialBlogs.length; ++i) {
-    let blog = new Blog(initialBlogs[i])
+    let blog = initialBlogs[i]
+    blog.user = user._id
+    blog = new Blog(blog)
+//    console.log(blog)
     await blog.save()
   }
 })
@@ -63,6 +75,9 @@ test('returned blogs are identified with id instead of _id', async () => {
 })
 
 test('blog is added', async () => {
+  const user = await User.findOne({})
+  const userForToken = { username: user.username, id: user._id }
+  const token = jwt.sign(userForToken, process.env.SECRET, { expiresIn: 60 })
   const newBlog = {
     title: "Type wars",
     author: "Robert C. Martin",
@@ -70,7 +85,9 @@ test('blog is added', async () => {
     likes: 2,
   }  
 
-  await api.post('/api/blogs')
+  await api
+    .post('/api/blogs')
+    .set('Authorization', `Bearer ${token}`)
     .send(newBlog)
     .expect(201)
     .expect('Content-type', /application\/json/)
@@ -80,24 +97,39 @@ test('blog is added', async () => {
 })
 
 test('if amount of likes is not given it is set to 0', async () => {
+  const user = await User.findOne({})
+  const userForToken = { username: user.username, id: user._id }
+  const token = jwt.sign(userForToken, process.env.SECRET, { expiresIn: 60 })
   const newBlog = {
     title: "Type wars",
     author: "Robert C. Martin",
     url: "http://blog.cleancoder.com/uncle-bob/2016/05/01/TypeWars.html",
   }  
 
-  const response = await api.post('/api/blogs').send(newBlog)
+  const response = await api
+    .post('/api/blogs')
+    .set('Authorization', `Bearer ${token}`)
+    .send(newBlog)
+    .expect(201)
+    .expect('Content-type', /application\/json/)
   const addedBlog = response.body
   expect(addedBlog.likes).toBeDefined()
   expect(addedBlog.likes).toBe(0)
 })
 
 test('blogs without title or url are rejected with code 400', async () => {
+  const user = await User.findOne({})
+  const userForToken = { username: user.username, id: user._id }
+  const token = jwt.sign(userForToken, process.env.SECRET, { expiresIn: 60 })
   let newBlog = {
     title: "Type wars",
     author: "Robert C. Martin",
   }  
-  await api.post('/api/blogs').send(newBlog).expect(400)
+  await api
+    .post('/api/blogs')
+    .set('Authorization', `Bearer ${token}`)
+    .send(newBlog)
+    .expect(400)
   let blogs = await getAllBlogs()
   expect(blogs).toHaveLength(initialBlogs.length)
   newBlog = {
@@ -105,15 +137,40 @@ test('blogs without title or url are rejected with code 400', async () => {
     url: "http://blog.cleancoder.com/uncle-bob/2016/05/01/TypeWars.html",
     likes: 2,
   }  
-  await api.post('/api/blogs').send(newBlog).expect(400)
+  await api
+    .post('/api/blogs')
+    .set('Authorization', `Bearer ${token}`)
+    .send(newBlog)
+    .expect(400)
   blogs = await getAllBlogs()
   expect(blogs).toHaveLength(initialBlogs.length)
 })
 
+test('responds with code 401 if no token is set when creating a blog', async () => {
+  const newBlog = {
+    title: "Type wars",
+    author: "Robert C. Martin",
+    url: "http://blog.cleancoder.com/uncle-bob/2016/05/01/TypeWars.html",
+    likes: 2,
+  }  
+  await api
+    .post('/api/blogs')
+    .send(newBlog)
+    .expect(401)
+  const blogs = await getAllBlogs()
+  expect(blogs).toHaveLength(initialBlogs.length)
+})
+
 test('delete removes the blog from database', async () => {
+  const user = await User.findOne({})
+  const userForToken = { username: user.username, id: user._id }
+  const token = jwt.sign(userForToken, process.env.SECRET, { expiresIn: 60 })
   let blogs = await getAllBlogs()
   const blog = blogs[0]
-  await api.delete(`/api/blogs/${blog.id}`).expect(204)
+  await api
+    .delete(`/api/blogs/${blog.id}`)
+    .set('Authorization', `Bearer ${token}`)
+    .expect(204)
   blogs = await getAllBlogs()
   expect(blogs.map(b => b.id)).not.toContain(blog.id)
 })

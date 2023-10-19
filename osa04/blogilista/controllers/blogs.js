@@ -13,7 +13,7 @@ blogsRouter.post('/', async (request, response) => {
   const { author, title, url, likes } = request.body
   const user = request.user
   if (!request.user) {
-    return response.status(401)
+    return response.status(401).end()
   }
   const blog = new Blog({
     author,
